@@ -58,3 +58,9 @@ build/
 *.bak
 *.tmp
 *~
+
+#cursor files
+.cursorrules
+assessment.cursorrules
+interview-context.md
+base_project_instructions.md
