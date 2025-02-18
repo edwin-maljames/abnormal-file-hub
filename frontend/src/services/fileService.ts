@@ -24,4 +24,26 @@ export const fileService = {
   async deleteFile(id: string): Promise<void> {
     await axios.delete(`${API_URL}/files/${id}/`);
   },
+
+  async downloadFile(fileUrl: string, filename: string): Promise<void> {
+    try {
+      const response = await axios.get(fileUrl, {
+        responseType: 'blob',
+      });
+      
+      // Create a blob URL and trigger download
+      const blob = new Blob([response.data]);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+      throw new Error('Failed to download file');
+    }
+  },
 }; 

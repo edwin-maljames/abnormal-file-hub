@@ -1,42 +1,49 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { fileService } from '../services/fileService';
 import { File as FileType } from '../types/file';
-import { DocumentIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { DocumentIcon, TrashIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export const FileList: React.FC = () => {
-  const [files, setFiles] = useState<FileType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const loadFiles = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await fileService.getFiles();
-      setFiles(data);
-    } catch (err) {
-      setError('Failed to load files. Please try again.');
-      console.error('Load error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Query for fetching files
+  const { data: files, isLoading, error } = useQuery({
+    queryKey: ['files'],
+    queryFn: fileService.getFiles,
+  });
+
+  // Mutation for deleting files
+  const deleteMutation = useMutation({
+    mutationFn: fileService.deleteFile,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['files'] });
+    },
+  });
+
+  // Mutation for downloading files
+  const downloadMutation = useMutation({
+    mutationFn: ({ fileUrl, filename }: { fileUrl: string; filename: string }) =>
+      fileService.downloadFile(fileUrl, filename),
+  });
 
   const handleDelete = async (id: string) => {
     try {
-      await fileService.deleteFile(id);
-      setFiles(files.filter(file => file.id !== id));
+      await deleteMutation.mutateAsync(id);
     } catch (err) {
-      setError('Failed to delete file. Please try again.');
       console.error('Delete error:', err);
     }
   };
 
-  useEffect(() => {
-    loadFiles();
-  }, []);
+  const handleDownload = async (fileUrl: string, filename: string) => {
+    try {
+      await downloadMutation.mutateAsync({ fileUrl, filename });
+    } catch (err) {
+      console.error('Download error:', err);
+    }
+  };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="p-6">
         <div className="animate-pulse space-y-4">
@@ -70,7 +77,7 @@ export const FileList: React.FC = () => {
               </svg>
             </div>
             <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
+              <p className="text-sm text-red-700">Failed to load files. Please try again.</p>
             </div>
           </div>
         </div>
@@ -81,7 +88,7 @@ export const FileList: React.FC = () => {
   return (
     <div className="p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-4">Uploaded Files</h2>
-      {files.length === 0 ? (
+      {!files || files.length === 0 ? (
         <div className="text-center py-12">
           <DocumentIcon className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No files</h3>
@@ -109,9 +116,18 @@ export const FileList: React.FC = () => {
                       Uploaded {new Date(file.uploaded_at).toLocaleString()}
                     </p>
                   </div>
-                  <div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleDownload(file.file, file.original_filename)}
+                      disabled={downloadMutation.isPending}
+                      className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                    >
+                      <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+                      Download
+                    </button>
                     <button
                       onClick={() => handleDelete(file.id)}
+                      disabled={deleteMutation.isPending}
                       className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     >
                       <TrashIcon className="h-4 w-4 mr-1" />

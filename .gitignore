@@ -60,7 +60,7 @@ build/
 *~
 
 #cursor files
-.cursorrules
+.cursor
 assessment.cursorrules
 interview-context.md
-base_project_instructions.md
+base_project_requirements.md
