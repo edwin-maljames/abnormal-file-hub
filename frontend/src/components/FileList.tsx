@@ -1,7 +1,12 @@
 import React from 'react';
 import { fileService } from '../services/fileService';
 import { File as FileType } from '../types/file';
-import { DocumentIcon, TrashIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import {
+  DocumentIcon,
+  TrashIcon,
+  ArrowDownTrayIcon,
+  DocumentDuplicateIcon,
+} from '@heroicons/react/24/outline';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export const FileList: React.FC = () => {
@@ -18,6 +23,7 @@ export const FileList: React.FC = () => {
     mutationFn: fileService.deleteFile,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['files'] });
+      queryClient.invalidateQueries({ queryKey: ['storage-quota'] });
     },
   });
 
@@ -41,6 +47,12 @@ export const FileList: React.FC = () => {
     } catch (err) {
       console.error('Download error:', err);
     }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   if (isLoading) {
@@ -103,18 +115,35 @@ export const FileList: React.FC = () => {
               <li key={file.id} className="py-4">
                 <div className="flex items-center space-x-4">
                   <div className="flex-shrink-0">
-                    <DocumentIcon className="h-8 w-8 text-gray-400" />
+                    {file.is_original ? (
+                      <DocumentIcon className="h-8 w-8 text-gray-400" />
+                    ) : (
+                      <DocumentDuplicateIcon className="h-8 w-8 text-primary-400" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {file.original_filename}
+                    <div className="flex items-center space-x-2">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {file.display_name}
+                      </p>
+                      {!file.is_original && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800">
+                          Similar
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      {file.file_type} • {formatFileSize(file.size)}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {file.file_type} • {(file.size / 1024).toFixed(2)} KB
+                      Uploaded {new Date(file.created_at).toLocaleString()}
                     </p>
-                    <p className="text-sm text-gray-500">
-                      Uploaded {new Date(file.uploaded_at).toLocaleString()}
-                    </p>
+                    {file.similarity_info && (
+                      <p className="text-xs text-primary-600 mt-1">
+                        {Math.round(file.similarity_info.score * 100)}% similar to{' '}
+                        {file.similarity_info.original_file.filename}
+                      </p>
+                    )}
                   </div>
                   <div className="flex space-x-2">
                     <button

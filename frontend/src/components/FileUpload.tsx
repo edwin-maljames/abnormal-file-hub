@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { fileService } from '../services/fileService';
 import { CloudArrowUpIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { StorageQuota } from './StorageQuota';
+import { File as FileType } from '../types/file';
 
 interface FileUploadProps {
   onUploadSuccess: () => void;
@@ -10,26 +12,70 @@ interface FileUploadProps {
 export const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [similarityInfo, setSimilarityInfo] = useState<{
+    file: FileType;
+    similarity: number;
+    is_duplicate: boolean;
+  } | null>(null);
   const queryClient = useQueryClient();
 
   const uploadMutation = useMutation({
     mutationFn: fileService.uploadFile,
-    onSuccess: () => {
-      // Invalidate and refetch files query
+    onSuccess: (response) => {
+      console.log('Upload response:', response);  // Debug log
+      
+      // Clear any existing errors
+      setError(null);
+      
+      if (response.is_duplicate) {
+        console.log('Handling duplicate file:', response.file);  // Debug log
+        setSimilarityInfo({
+          file: response.file,
+          similarity: 1.0,
+          is_duplicate: true
+        });
+        return;
+      }
+      
+      if (response.similar_file) {
+        console.log('Handling similar file:', response.similar_file);  // Debug log
+        setSimilarityInfo({
+          file: response.similar_file,
+          similarity: response.similarity || 0,
+          is_duplicate: false
+        });
+        return;
+      }
+
+      // Regular upload success
+      console.log('Handling new file upload');  // Debug log
       queryClient.invalidateQueries({ queryKey: ['files'] });
+      queryClient.invalidateQueries({ queryKey: ['storage-quota'] });
       setSelectedFile(null);
+      setSimilarityInfo(null);
       onUploadSuccess();
     },
-    onError: (error) => {
-      setError('Failed to upload file. Please try again.');
+    onError: (error: any) => {
+      console.error('Upload error details:', error.response?.data);  // Debug log
+      if (error.response?.data?.error === 'Storage quota exceeded') {
+        setError('Storage quota exceeded. Please delete some files first.');
+      } else {
+        setError('Failed to upload file. Please try again.');
+      }
       console.error('Upload error:', error);
     },
   });
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
-      setSelectedFile(event.target.files[0]);
+      const file = event.target.files[0];
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        setError('File size exceeds 10MB limit');
+        return;
+      }
+      setSelectedFile(file);
       setError(null);
+      setSimilarityInfo(null);
     }
   };
 
@@ -53,6 +99,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
         <CloudArrowUpIcon className="h-6 w-6 text-primary-600 mr-2" />
         <h2 className="text-xl font-semibold text-gray-900">Upload File</h2>
       </div>
+
+      <StorageQuota />
+
       <div className="mt-4 space-y-4">
         <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
           <div className="space-y-1 text-center">
@@ -76,16 +125,37 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
             <p className="text-xs text-gray-500">Any file up to 10MB</p>
           </div>
         </div>
+
         {selectedFile && (
           <div className="text-sm text-gray-600">
             Selected: {selectedFile.name}
           </div>
         )}
+
+        {similarityInfo && (
+          <div className={`p-4 rounded-md ${
+            similarityInfo.is_duplicate ? 'bg-yellow-50' : 'bg-blue-50'
+          }`}>
+            <h3 className="text-sm font-medium mb-2">
+              {similarityInfo.is_duplicate ? 'Duplicate File Found' : 'Similar File Found'}
+            </h3>
+            <p className="text-sm text-gray-600">
+              {similarityInfo.is_duplicate
+                ? `This file is identical to "${similarityInfo.file.display_name}"`
+                : `This file is ${Math.round(similarityInfo.similarity * 100)}% similar to "${similarityInfo.file.display_name}"`}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Original file uploaded on {new Date(similarityInfo.file.created_at).toLocaleString()}
+            </p>
+          </div>
+        )}
+
         {error && (
           <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
             {error}
           </div>
         )}
+
         <button
           onClick={handleUpload}
           disabled={!selectedFile || uploadMutation.isPending}
