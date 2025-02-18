@@ -10,28 +10,16 @@ logger = logging.getLogger(__name__)
 
 def file_upload_path(instance, filename):
     """Generate file path for new file upload"""
-    logger.debug(f"Generating upload path for {filename}")
     ext = filename.split('.')[-1]
     filename = f"{uuid.uuid4()}.{ext}"
-    path = os.path.join('uploads', filename)
-    logger.debug(f"Generated path: {path}")
-    return path
+    return os.path.join('uploads', filename)
 
 def calculate_file_hash(file):
     """Calculate SHA-256 hash of file"""
-    logger.debug("Starting file hash calculation")
-    logger.debug(f"File name: {file.name}, Size: {file.size}")
     sha256_hash = hashlib.sha256()
-    chunk_count = 0
-    total_bytes = 0
     for chunk in file.chunks():
-        chunk_count += 1
-        total_bytes += len(chunk)
         sha256_hash.update(chunk)
-    hash_value = sha256_hash.hexdigest()
-    logger.debug(f"Hash calculation complete - Chunks processed: {chunk_count}, Total bytes: {total_bytes}")
-    logger.debug(f"Generated hash: {hash_value}")
-    return hash_value
+    return sha256_hash.hexdigest()
 
 class File(models.Model):
     CONTENT_TYPES = {
@@ -86,26 +74,20 @@ class File(models.Model):
         return self.original_filename
 
     def clean(self):
-        logger.debug(f"Cleaning file instance: {self.original_filename}")
         if not self.id:  # New file
             # Check storage quota
             if self.user:
                 user_storage = File.get_user_storage(self.user)
-                logger.debug(f"User storage usage: {user_storage}")
             else:
                 user_storage = File.get_session_storage(self.session_id)
-                logger.debug(f"Session storage usage: {user_storage}")
             if user_storage + self.size > self.MAX_STORAGE_BYTES:
-                logger.warning(f"Storage quota exceeded. Current: {user_storage}, New: {self.size}")
+                logger.error(f"Storage quota exceeded. Current: {user_storage}, New: {self.size}")
                 raise ValidationError("Storage quota exceeded")
 
     def save(self, *args, **kwargs):
-        logger.debug(f"Saving file instance: {self.original_filename}")
         if not self.content_hash and self.file:
-            logger.debug("Calculating content hash for new file")
             self.content_hash = calculate_file_hash(self.file)
         super().save(*args, **kwargs)
-        logger.debug(f"File saved successfully with ID: {self.id}")
 
     @property
     def display_name(self):
@@ -144,10 +126,7 @@ class File(models.Model):
 
     def get_content_type_category(self):
         """Get the category of the file (text, pdf, image)"""
-        logger.debug(f"Getting content type category for file type: {self.file_type}")
         for category, types in self.CONTENT_TYPES.items():
             if self.file_type in types:
-                logger.debug(f"Found category: {category}")
                 return category
-        logger.debug("No matching category found, returning 'other'")
         return 'other'

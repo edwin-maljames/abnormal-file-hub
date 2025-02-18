@@ -59,7 +59,6 @@ class FileSerializer(serializers.ModelSerializer):
         validated_data.update(file_metadata)
 
         # Calculate hash before saving
-        logger.debug(f"Calculating hash for file: {file_obj.name}")
         content_hash = calculate_file_hash(file_obj)
 
         # Build query based on user or session
@@ -73,7 +72,6 @@ class FileSerializer(serializers.ModelSerializer):
             validated_data['user'] = request.user
 
         # Check for existing duplicate
-        logger.debug(f"Checking for duplicates with hash: {content_hash}")
         existing_file = File.objects.filter(
             content_hash=content_hash,
             is_original=True,
@@ -81,14 +79,11 @@ class FileSerializer(serializers.ModelSerializer):
         ).first()
 
         if existing_file:
-            logger.debug(f"Found duplicate file: {existing_file.id}")
-            # Set flag to indicate this is an existing file
+            logger.info(f"Found duplicate file: {existing_file.id}")
             existing_file._created_new = False
             return existing_file
 
         # No duplicate found, proceed with save
-        logger.debug("No duplicate found, creating new file")
-        logger.debug(f"File metadata: {file_metadata}")
         validated_data['content_hash'] = content_hash
         validated_data['is_original'] = True
         

@@ -20,49 +20,35 @@ class FileViewSet(viewsets.ModelViewSet):
     queryset = File.objects.all()
     
     def get_queryset(self):
-        logger.debug("Starting get_queryset")
         try:
             if isinstance(self.request.user, AnonymousUser):
-                logger.debug("User is anonymous")
                 if not self.request.session.exists(self.request.session.session_key):
-                    logger.debug("Creating new session")
                     self.request.session.create()
                 session_id = self.request.session.session_key
-                logger.debug(f"Session ID: {session_id}")
                 return File.objects.filter(session_id=session_id)
-            logger.debug(f"User is authenticated: {self.request.user.id}")
             return File.objects.filter(user=self.request.user)
         except Exception as e:
             logger.error(f"Error in get_queryset: {str(e)}", exc_info=True)
             return File.objects.none()
 
     def create(self, request, *args, **kwargs):
-        logger.debug("Starting file upload")
         try:
             with transaction.atomic():
-                # Create and validate serializer
                 serializer = self.get_serializer(data=request.data)
                 serializer.is_valid(raise_exception=True)
                 
-                # Save the file - duplicate checking happens in serializer
                 file_instance = serializer.save()
-                logger.debug(f"File processed successfully: {file_instance.id}")
+                logger.info(f"File processed: {file_instance.id}")
 
-                # Check if this was a duplicate (not created new)
                 if hasattr(file_instance, '_created_new') and not file_instance._created_new:
-                    logger.debug(f"Handling duplicate file response for: {file_instance.id}")
                     response_data = {
                         'file': FileSerializer(file_instance).data,
                         'is_duplicate': True,
                         'similarity': 1.0
                     }
-                    logger.debug(f"Sending duplicate response: {response_data}")
                     return Response(response_data, status=status.HTTP_200_OK)
 
-                # Return newly created file
-                logger.debug("Handling new file response")
                 response_data = FileSerializer(file_instance).data
-                logger.debug(f"Sending new file response: {response_data}")
                 return Response(
                     response_data,
                     status=status.HTTP_201_CREATED
